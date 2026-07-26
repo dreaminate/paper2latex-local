@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "paper2latex-local"
+version = "0.1.0"
+description = "Local-first task packaging for photographed paper, Markdown, LaTeX, and searchable PDF workflows."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+authors = [
+  { name = "dreaminate" },
+]
+keywords = ["ocr", "latex", "markdown", "handwriting", "local-first"]
+classifiers = [
+  "Development Status :: 2 - Pre-Alpha",
+  "Environment :: Console",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Topic :: Multimedia :: Graphics :: Capture :: Scanners",
+  "Topic :: Text Processing :: Markup :: LaTeX",
+]
+dependencies = []
+
+[project.urls]
+Repository = "https://github.com/dreaminate/paper2latex-local"
+
+[project.scripts]
+paper2latex = "paper2latex_local.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
