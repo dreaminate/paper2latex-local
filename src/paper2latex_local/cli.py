@@ -298,7 +298,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 0
         if args.command == "finalize-diagram":
             result = finalize_diagram_package(args.task_dir)
-            if not args.no_open:
+            if not args.no_open and sys.platform == "darwin":
                 subprocess.run(
                     ["open", "-a", "draw.io", str(result.clean_drawio)],
                     check=False,

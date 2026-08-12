@@ -7,6 +7,7 @@ import mimetypes
 import os
 import re
 import subprocess
+import sys
 import tempfile
 import threading
 from collections import Counter
@@ -615,7 +616,10 @@ def _handler(store: ReviewStore) -> type[BaseHTTPRequestHandler]:
                     state = self._body()
                     final = store.finalize(state)
                     clean_drawio = None
-                    if (store.root / "diagram-review.json").is_file():
+                    if (
+                        sys.platform == "darwin"
+                        and (store.root / "diagram-review.json").is_file()
+                    ):
                         clean_drawio = str(store.root / "diagram/clean.drawio")
                         subprocess.run(
                             ["open", "-a", "draw.io", clean_drawio],

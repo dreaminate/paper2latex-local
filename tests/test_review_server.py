@@ -188,7 +188,11 @@ class ReviewServerTests(unittest.TestCase):
                 encoding="utf-8",
             )
             store = ReviewStore(root)
-            store.save(store.current)
+            with patch(
+                "paper2latex_local.render.render_markdown_pdf",
+                side_effect=fake_render_pdf,
+            ):
+                store.save(store.current)
             document = (root / "document.md").read_text()
             self.assertIn("$x$", document)
             self.assertNotIn("$y$", document)
@@ -354,7 +358,11 @@ class ReviewServerTests(unittest.TestCase):
             crop = current["pages"][0]["formula_crops"][0]
             crop["latex"] = "y"
             crop["review"] = "confirmed"
-            store.save(current)
+            with patch(
+                "paper2latex_local.render.render_markdown_pdf",
+                side_effect=fake_render_pdf,
+            ):
+                store.save(current)
             document = (root / "document.md").read_text()
             self.assertIn("-->$y$<!--", document)
             self.assertTrue(document.endswith(" and $x$\n"))
@@ -388,7 +396,11 @@ class ReviewServerTests(unittest.TestCase):
                 store.save(current)
             crop["markdown_mapping"] = "manual_confirmed"
             current["document_markdown"] += "\n$$y$$\n"
-            store.save(current)
+            with patch(
+                "paper2latex_local.render.render_markdown_pdf",
+                side_effect=fake_render_pdf,
+            ):
+                store.save(current)
             self.assertIn("$$y$$", (root / "document.md").read_text())
 
     def test_manual_formula_must_be_inside_a_math_token(self) -> None:
@@ -451,7 +463,11 @@ class ReviewServerTests(unittest.TestCase):
                 store.save(current)
 
             current["document_markdown"] += "$x$\n"
-            store.save(current)
+            with patch(
+                "paper2latex_local.render.render_markdown_pdf",
+                side_effect=fake_render_pdf,
+            ):
+                store.save(current)
             self.assertEqual((root / "document.md").read_text().count("$x$"), 2)
 
     def test_uncertain_page_mode_cannot_finalize(self) -> None:

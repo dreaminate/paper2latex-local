@@ -66,7 +66,12 @@ class PhotoPreprocessingTests(unittest.TestCase):
             self.assertFalse(result.rectified)
             self.assertIsNone(result.corners)
             self.assertEqual(result.output_size, result.source_size)
-            self.assertEqual(result.provenance["page_boundary"]["state"], "not_confident")
+            expected_state = (
+                "not_confident"
+                if importlib.util.find_spec("cv2")
+                else "not_available"
+            )
+            self.assertEqual(result.provenance["page_boundary"]["state"], expected_state)
 
     def test_refuses_in_place_output(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
