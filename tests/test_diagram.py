@@ -6,6 +6,7 @@ import tempfile
 import unittest
 from xml.etree import ElementTree as ET
 
+from lxml import etree as lxml_etree
 from pypdf import PdfReader
 
 from paper2latex_local.diagram import (
@@ -80,6 +81,18 @@ class DiagramModelTests(unittest.TestCase):
     def test_validation_rejects_duplicate_ids_and_unknown_endpoint(self) -> None:
         with self.assertRaisesRegex(ValueError, "node IDs"):
             DiagramGraph((DiagramNode("same", "a"), DiagramNode("same", "b")), ())
+        with self.assertRaisesRegex(ValueError, "globally unique"):
+            DiagramGraph(
+                (DiagramNode("same", "a"), DiagramNode("target", "b")),
+                (DiagramEdge("same", "same", "target"),),
+            )
+        with self.assertRaisesRegex(ValueError, "reserved"):
+            DiagramGraph((DiagramNode("0", "a"),), ())
+        with self.assertRaisesRegex(ValueError, "reserved"):
+            DiagramGraph(
+                (DiagramNode("source", "a"), DiagramNode("target", "b")),
+                (DiagramEdge("1", "source", "target"),),
+            )
         with self.assertRaisesRegex(ValueError, "unknown endpoint"):
             DiagramGraph((DiagramNode("a", "a"),), (DiagramEdge("e", "a", "missing"),))
 
@@ -105,19 +118,29 @@ class DiagramModelTests(unittest.TestCase):
 
     def test_drawio_has_true_cells_endpoints_and_latex_metadata(self) -> None:
         root = ET.fromstring(to_drawio_xml(sample_graph(), include_excluded=True))
-        cells = root.findall(".//mxCell")
-        vertices = [cell for cell in cells if cell.get("vertex") == "1"]
-        edges = [cell for cell in cells if cell.get("edge") == "1"]
-        self.assertEqual({cell.get("id") for cell in vertices}, {"start", "decision", "crossed"})
+        objects = root.findall(".//object")
+        vertices = [obj for obj in objects if obj.find("mxCell").get("vertex") == "1"]
+        edges = [obj for obj in objects if obj.find("mxCell").get("edge") == "1"]
+        self.assertEqual({obj.get("id") for obj in vertices}, {"start", "decision", "crossed"})
         self.assertEqual(len(edges), 2)
-        directed = next(cell for cell in edges if cell.get("id") == "start-to-decision")
+        directed = next(obj for obj in edges if obj.get("id") == "start-to-decision").find("mxCell")
         self.assertEqual(directed.get("source"), "start")
         self.assertEqual(directed.get("target"), "decision")
-        self.assertEqual(next(cell for cell in vertices if cell.get("id") == "start").get("data-latex"), r"$x_0$")
-        formula = next(cell for cell in vertices if cell.get("id") == "start")
-        self.assertIn(r"$$x_0$$", formula.get("value"))
+        formula = next(obj for obj in vertices if obj.get("id") == "start")
+        self.assertEqual(formula.get("data-latex"), r"$x_0$")
+        self.assertIn(r"$$x_0$$", formula.get("label"))
         self.assertEqual(formula.get("data-label"), "Start | now")
         self.assertEqual(root.find(".//mxGraphModel").get("math"), "1")
+        for cell in root.findall(".//mxCell"):
+            self.assertFalse(any(name.startswith("data-") for name in cell.attrib))
+            if cell.get("vertex") == "1" or cell.get("edge") == "1":
+                self.assertIsNone(cell.get("id"))
+
+    def test_drawio_validates_against_official_mxfile_schema(self) -> None:
+        schema_path = Path(__file__).parent / "fixtures/drawio-mxfile.xsd"
+        schema = lxml_etree.XMLSchema(lxml_etree.parse(str(schema_path)))
+        document = lxml_etree.fromstring(to_drawio_xml(sample_graph(), include_excluded=True).encode())
+        schema.assertValid(document)
 
     def test_mermaid_escapes_labels(self) -> None:
         output = to_mermaid(sample_graph())

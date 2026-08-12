@@ -140,15 +140,21 @@ def to_drawio_xml(
     draft = not final
     for node in sorted(prepared.nodes, key=lambda item: item.id):
         value = _display_label(node)
-        attrs = {
+        wrapper_attrs = {
             "id": node.id,
-            "value": value,
-            "style": _node_style(node),
-            "vertex": "1",
-            "parent": "1",
+            "label": value,
         }
-        attrs.update(_metadata_attrs(node, draft=draft))
-        cell = ET.SubElement(model_root, "mxCell", attrs)
+        wrapper_attrs.update(_metadata_attrs(node, draft=draft))
+        wrapper = ET.SubElement(model_root, "object", wrapper_attrs)
+        cell = ET.SubElement(
+            wrapper,
+            "mxCell",
+            {
+                "style": _node_style(node),
+                "vertex": "1",
+                "parent": "1",
+            },
+        )
         ET.SubElement(
             cell,
             "mxGeometry",
@@ -163,9 +169,13 @@ def to_drawio_xml(
 
     for edge in sorted(prepared.edges, key=lambda item: item.id):
         value = _display_label(edge)
-        attrs = {
+        wrapper_attrs = {
             "id": edge.id,
-            "value": value,
+            "label": value,
+        }
+        wrapper_attrs.update(_metadata_attrs(edge, draft=draft))
+        wrapper = ET.SubElement(model_root, "object", wrapper_attrs)
+        attrs = {
             "style": "edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;",
             "edge": "1",
             "parent": "1",
@@ -178,8 +188,7 @@ def to_drawio_xml(
             attrs["style"] += "endArrow=none;startArrow=none;"
         elif edge.kind is EdgeKind.ASSOCIATION:
             attrs["style"] += "dashed=1;"
-        attrs.update(_metadata_attrs(edge, draft=draft))
-        cell = ET.SubElement(model_root, "mxCell", attrs)
+        cell = ET.SubElement(wrapper, "mxCell", attrs)
         geometry = ET.SubElement(cell, "mxGeometry", {"relative": "1", "as": "geometry"})
         points = _edge_points(edge, nodes)
         if len(points) > 2:

@@ -30,6 +30,9 @@ dependencies = [
 quality = [
   "opencv-python>=4.10,<6",
 ]
+test = [
+  "lxml>=5,<7",
+]
 
 [project.urls]
 Repository = "https://github.com/dreaminate/paper2latex-local"

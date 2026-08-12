@@ -189,12 +189,15 @@ pipeline requirement, not overall accuracy.
 ## Development
 
 ```bash
-PYTHONPATH=src python -m unittest discover -s tests -v
+uv pip install --python .venv/bin/python -e '.[test]'
+PYTHONPATH=src .venv/bin/python -m unittest discover -s tests -v
 PYTHONPYCACHEPREFIX=/tmp/paper2latex-pycache \
-  PYTHONPATH=src python -m compileall -q src tests
+  PYTHONPATH=src .venv/bin/python -m compileall -q src tests
 ```
 
 ## License
 
 Project code is available under the [MIT License](LICENSE). External engines
 and model weights retain their own licenses and are not redistributed here.
+The official draw.io XSD test fixture retains its upstream Apache-2.0 license
+in `tests/fixtures/drawio-mcp-LICENSE`.

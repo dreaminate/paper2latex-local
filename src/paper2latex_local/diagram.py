@@ -362,6 +362,10 @@ class DiagramGraph:
         edge_ids = [edge.id for edge in self.edges]
         if len(edge_ids) != len(set(edge_ids)):
             raise DiagramError("edge IDs must be unique")
+        if set(node_ids) & set(edge_ids):
+            raise DiagramError("node and edge IDs must be globally unique")
+        if {"0", "1"} & (set(node_ids) | set(edge_ids)):
+            raise DiagramError("diagram IDs 0 and 1 are reserved for draw.io structure")
         node_set = set(node_ids)
         for edge in self.edges:
             if edge.source not in node_set or edge.target not in node_set:
