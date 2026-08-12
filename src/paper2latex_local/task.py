@@ -140,11 +140,27 @@ def load_status(task_dir: Path) -> dict[str, Any]:
     """Read and minimally validate a task manifest."""
 
     root = Path(task_dir).expanduser().resolve()
-    manifest_path = root / "review.json"
-    if not manifest_path.is_file():
-        raise TaskError(f"review manifest not found: {manifest_path}")
+    manifest_path = next(
+        (
+            candidate
+            for candidate in (
+                root / "review.final.json",
+                root / "review.current.json",
+                root / "review.json",
+                root / "diagram-review.json",
+            )
+            if candidate.is_file()
+        ),
+        None,
+    )
+    if manifest_path is None:
+        raise TaskError(f"review manifest not found in: {root}")
     data = json.loads(manifest_path.read_text(encoding="utf-8"))
-    required = {"schema_version", "task_id", "mode", "page_count", "pages"}
+    if isinstance(data.get("graph", data.get("diagram")), dict):
+        required = {"schema_version", "status", "outputs"}
+        data.setdefault("task_id", root.name)
+    else:
+        required = {"schema_version", "task_id", "mode", "page_count", "pages"}
     missing = required.difference(data)
     if missing:
         raise TaskError(f"review manifest is missing: {', '.join(sorted(missing))}")

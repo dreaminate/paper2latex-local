@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "paper2latex-local"
-version = "0.1.0"
-description = "Local-first task packaging for photographed paper, Markdown, LaTeX, and searchable PDF workflows."
+version = "0.3.0"
+description = "Local-first paper OCR and editable diagram conversion for Markdown, LaTeX, PDF, and draw.io."
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
@@ -21,7 +21,15 @@ classifiers = [
   "Topic :: Multimedia :: Graphics :: Capture :: Scanners",
   "Topic :: Text Processing :: Markup :: LaTeX",
 ]
-dependencies = []
+dependencies = [
+  "Pillow>=10,<13",
+  "pypdf>=5,<7",
+]
+
+[project.optional-dependencies]
+quality = [
+  "opencv-python>=4.10,<6",
+]
 
 [project.urls]
 Repository = "https://github.com/dreaminate/paper2latex-local"
@@ -31,3 +39,6 @@ paper2latex = "paper2latex_local.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+paper2latex_local = ["review.html"]

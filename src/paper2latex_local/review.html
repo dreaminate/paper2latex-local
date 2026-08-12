@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OCR 本地复核</title>
+  <style>
+    :root { color-scheme: light; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background:#f4f2ed; color:#17212b; }
+    * { box-sizing:border-box; }
+    body { margin:0; }
+    header { display:flex; align-items:center; gap:14px; padding:16px 22px; background:#182a3a; color:white; position:sticky; top:0; z-index:2; }
+    header h1 { margin:0; font-size:18px; flex:1; }
+    button { border:0; border-radius:8px; padding:9px 14px; cursor:pointer; background:#dfe8ee; color:#17212b; font-weight:600; }
+    button.primary { background:#e9a23b; }
+    button.final { background:#63b584; color:#071c11; }
+    main { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:14px; padding:14px; min-height:58vh; }
+    section { background:white; border:1px solid #d9d5cd; border-radius:12px; overflow:hidden; }
+    section h2 { font-size:14px; margin:0; padding:11px 14px; background:#ebe8e1; }
+    .viewer { width:100%; height:58vh; object-fit:contain; display:block; background:#fafafa; }
+    .toolbar { display:flex; gap:8px; align-items:center; padding:8px 14px; background:#f8f7f3; }
+    #editor { margin:0 14px 24px; padding:16px; }
+    .item { display:grid; grid-template-columns:110px 1fr 1fr auto; gap:8px; align-items:center; padding:8px 0; border-bottom:1px solid #eee; }
+    input { width:100%; padding:8px; border:1px solid #c7cdd1; border-radius:6px; }
+    .warning { color:#9a5d00; font-weight:700; }
+    .crop { max-width:220px; max-height:90px; border:1px solid #ddd; background:white; }
+    .candidate { font-size:12px; color:#475569; overflow-wrap:anywhere; }
+    #document-editor { margin:0 14px 24px; padding:16px; }
+    #document-markdown { width:100%; min-height:280px; font:13px ui-monospace, SFMono-Regular, Menlo, monospace; }
+    #message { padding:8px 14px; min-height:36px; }
+    @media (max-width:850px) { main { grid-template-columns:1fr; } .item { grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>OCR / 可编辑图本地复核</h1>
+    <button id="save" class="primary">保存当前态</button>
+    <button id="finalize" class="final">确认并生成最终态</button>
+  </header>
+  <main>
+    <section>
+      <div class="toolbar"><strong>原图（不可变）</strong><select id="page"></select></div>
+      <iframe id="original" class="viewer" title="原图"></iframe>
+    </section>
+    <section>
+      <div class="toolbar"><strong>电子版</strong><button id="faithful">原位置</button><button id="clean">标准排版</button></div>
+      <iframe id="preview" class="viewer" title="电子版预览"></iframe>
+    </section>
+  </main>
+  <div id="message"></div>
+  <section id="editor">
+    <h2>节点文字与 LaTeX（划掉内容默认排除，可恢复）</h2>
+    <div id="items"></div>
+  </section>
+  <section id="document-editor" hidden>
+    <h2>Markdown 最终内容（未自动定位的公式请在此放到正确位置）</h2>
+    <textarea id="document-markdown"></textarea>
+  </section>
+  <script>
+    let payload, state, graph;
+    const message = document.querySelector('#message');
+    const pathsBySuffix = suffix => Object.entries(payload.paths).find(([path]) => path.endsWith(suffix));
+    function setPreview(kind) {
+      const found = pathsBySuffix(`${kind}.svg`) || pathsBySuffix('document.preview.pdf') || pathsBySuffix('document.pdf') || pathsBySuffix('document.md');
+      if (found) document.querySelector('#preview').src = found[1];
+    }
+    function setOriginal(pageIndex) {
+      const pages = state.pages || [];
+      const selected = pages[pageIndex];
+      const path = selected && selected.original ? selected.original : Object.keys(payload.paths).find(path => path.includes('original/'));
+      if (path && payload.paths[path]) document.querySelector('#original').src = payload.paths[path];
+    }
+    function locateGraph(value) { return value.graph || value.diagram || value; }
+    function renderItems() {
+      graph = locateGraph(state); const host = document.querySelector('#items'); host.innerHTML = '';
+      let records = [...(graph.nodes || []).map(item => ['节点', item]), ...(graph.edges || []).map(item => ['连线', item])];
+      if (!records.length) {
+        records = (state.pages || []).flatMap(page => [
+          ...(page.formula_crops || []).map(item => ['公式', item]),
+          ...(
+            page.mode_confirmation_required || !['printed', 'handwritten'].includes(page.mode)
+              ? [['页面模式', page]]
+              : []
+          ),
+        ]);
+      }
+      for (const [type, node] of records) {
+        const row = document.createElement('div'); row.className = 'item';
+        const flags = (node.review_flags || []).join(', ');
+        const cropPath = type === '公式' && node.path ? payload.paths[node.path] : null;
+        row.innerHTML = `<code>${type} ${node.id || ''}</code><input class="label" value=""><input class="latex" placeholder="LaTeX"><label><input class="excluded" type="checkbox">排除</label><label><input class="confirmed" type="checkbox">已核对</label>${cropPath ? `<img class="crop" src="${cropPath}" alt="公式原图">` : ''}${node.mineru_latex ? `<span class="candidate">MinerU：${node.mineru_latex}</span>` : ''}${flags ? `<span class="warning">待确认：${flags}</span>` : ''}`;
+        row.querySelector('.label').value = node.label || node.mode || '';
+        row.querySelector('.latex').value = node.latex || '';
+        row.querySelector('.excluded').checked = Boolean(node.excluded);
+        row.querySelector('.label').oninput = event => {
+          if (type === '页面模式') node.mode = event.target.value;
+          else node.label = event.target.value;
+        };
+        if (type === '页面模式') {
+          row.querySelector('.label').outerHTML = `<select class="mode"><option value="">请选择</option><option value="printed">打印体</option><option value="handwritten">手写体</option></select>`;
+          const modeSelect = row.querySelector('.mode');
+          modeSelect.value = ['printed', 'handwritten'].includes(node.mode) ? node.mode : '';
+          modeSelect.onchange = event => { node.mode = event.target.value || 'uncertain'; };
+        }
+        row.querySelector('.latex').oninput = event => node.latex = event.target.value;
+        row.querySelector('.excluded').onchange = event => {
+          node.excluded = event.target.checked;
+          if (!event.target.checked && node.crossed_out) node.crossed_out = false;
+        };
+        row.querySelector('.confirmed').checked = !flags && node.review !== 'required' && !node.mode_confirmation_required;
+        row.querySelector('.confirmed').onchange = event => {
+          if (!event.target.checked) return;
+          if (type === '页面模式' && !['printed', 'handwritten'].includes(node.mode)) {
+            event.target.checked = false;
+            message.textContent = '请先选择打印体或手写体。';
+            return;
+          }
+          node.review_flags = [];
+          if (node.review === 'required') node.review = 'confirmed';
+          if (node.markdown_mapping === 'manual_required') node.markdown_mapping = 'manual_confirmed';
+          node.mode_confirmation_required = false;
+        };
+        if (type === '连线') {
+          const endpoints = document.createElement('span');
+          endpoints.innerHTML = `起点 <input class="source" value="${node.source || ''}"> 终点 <input class="target" value="${node.target || ''}"> 类型 <select class="kind"><option value="directed">有向</option><option value="undirected">无向</option><option value="association">关联</option></select> <button class="reverse" type="button">反向</button>`;
+          endpoints.querySelector('.kind').value = node.kind || 'directed';
+          endpoints.querySelector('.source').oninput = event => node.source = event.target.value;
+          endpoints.querySelector('.target').oninput = event => node.target = event.target.value;
+          endpoints.querySelector('.kind').onchange = event => node.kind = event.target.value;
+          endpoints.querySelector('.reverse').onclick = () => { const source = node.source; node.source = node.target; node.target = source; renderItems(); };
+          row.appendChild(endpoints);
+        }
+        host.appendChild(row);
+      }
+    }
+    async function load() {
+      payload = await (await fetch('/api/review')).json(); state = structuredClone(payload.current);
+      document.querySelector('#save').disabled = payload.status === 'finalized';
+      document.querySelector('#finalize').disabled = payload.status === 'finalized';
+      const selector = document.querySelector('#page'); selector.innerHTML = '';
+      const pages = state.pages || [];
+      (pages.length ? pages : [{page:1}]).forEach((page, index) => { const option = document.createElement('option'); option.value = index; option.textContent = `第 ${page.page || index + 1} 页`; selector.appendChild(option); });
+      selector.onchange = event => setOriginal(Number(event.target.value));
+      setOriginal(0);
+      const documentEditor = document.querySelector('#document-editor');
+      documentEditor.hidden = typeof state.document_markdown !== 'string';
+      if (!documentEditor.hidden) { const textarea = document.querySelector('#document-markdown'); textarea.value = state.document_markdown; textarea.oninput = event => state.document_markdown = event.target.value; }
+      setPreview('clean'); renderItems();
+      message.textContent = payload.unresolved.length ? `还有 ${payload.unresolved.length} 项必须确认。` : '当前没有未决项。';
+    }
+    async function post(path) {
+      const response = await fetch(path, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({state})});
+      const result = await response.json(); message.textContent = response.ok ? result.status : `失败：${result.error}`;
+      if (response.ok) await load();
+    }
+    document.querySelector('#faithful').onclick = () => setPreview('faithful');
+    document.querySelector('#clean').onclick = () => setPreview('clean');
+    document.querySelector('#save').onclick = () => post('/api/review/save');
+    document.querySelector('#finalize').onclick = () => post('/api/review/finalize');
+    load();
+  </script>
+</body>
+</html>
